@@ -97,6 +97,7 @@
                 <div class="flex flex-wrap justify-center gap-3 mt-8 slide-up" style="animation-delay:0.3s">
                     <div class="glass rounded-full px-4 py-2 text-sm">🧠 128K Context Memory</div>
                     <div class="glass rounded-full px-4 py-2 text-sm">⚡ Built-in Reasoning</div>
+                    <div class="glass rounded-full px-4 py-2 text-sm">🎤 Voice Interview</div>
                     <div class="glass rounded-full px-4 py-2 text-sm">📸 Image Analysis</div>
                     <div class="glass rounded-full px-4 py-2 text-sm">🔓 Open & Free</div>
                 </div>
@@ -243,6 +244,10 @@
                 <div class="glass rounded-lg px-3 py-1.5 text-xs font-medium">
                     <span id="questionCount">Q: 0</span> · <span id="tokenCount">0 tok</span>
                 </div>
+                <button id="voiceToggleBtn" onclick="toggleVoiceMode()" class="glass rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-white/10 transition flex items-center gap-1" title="Toggle voice mode (auto-read responses)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+                    <span id="voiceToggleLabel">🔇</span>
+                </button>
                 <button onclick="toggleDarkMode()" class="glass rounded-lg p-1.5 hover:bg-white/10 transition">
                     <svg class="w-4 h-4 hidden dark:block" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                     <svg class="w-4 h-4 block dark:hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
@@ -283,7 +288,14 @@
                         📋 History
                     </button>
                 </div>
-                <div class="flex gap-3">
+                <div class="flex gap-2">
+                    <button onclick="toggleMic()" id="micBtn" class="px-3 py-3 rounded-xl transition-all text-sm border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 hover:bg-surface-100 dark:hover:bg-surface-700 text-surface-500 dark:text-surface-400 disabled:opacity-50" title="Click to speak (or press and hold)">
+                        <svg id="micIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0m14 0a7 7 0 00-14 0m14 0v1a7 7 0 01-14 0v-1m7 8v3m-4 0h8M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z"/></svg>
+                        <div id="micPulse" class="hidden w-5 h-5 relative">
+                            <span class="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-50"></span>
+                            <span class="relative block w-5 h-5 rounded-full bg-red-500"></span>
+                        </div>
+                    </button>
                     <textarea id="userInput" rows="2" placeholder="Type your answer... (Shift+Enter for new line)" class="flex-1 px-4 py-3 border border-surface-200 dark:border-surface-700 rounded-xl text-sm resize-none bg-white dark:bg-surface-800 dark:text-surface-100 focus:border-brand-500 transition" onkeydown="handleKeyDown(event)"></textarea>
                     <button onclick="sendMessage()" id="sendBtn" class="px-6 py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white font-bold rounded-xl transition-all active:scale-[0.97] text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
                         Send →
@@ -330,6 +342,143 @@ let totalTokens = 0;
 let sessionConfig = {};
 let pendingImage = null; // {base64, mimeType, name}
 let selectedMode = 'behavioral';
+
+// ===== VOICE STATE =====
+let voiceMode = false; // auto-read coach responses
+let isListening = false;
+let recognition = null;
+let speechSynth = window.speechSynthesis;
+
+// Initialize Speech Recognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+        const input = document.getElementById('userInput');
+        if (finalTranscript) {
+            input.value = (input.value + ' ' + finalTranscript).trim();
+        }
+        // Show interim in placeholder
+        if (interimTranscript) {
+            input.placeholder = interimTranscript + '...';
+        }
+    };
+
+    recognition.onend = () => {
+        if (isListening) {
+            // Auto-restart if still in listening mode (browser may stop after silence)
+            try { recognition.start(); } catch(e) {}
+        } else {
+            updateMicUI(false);
+        }
+    };
+
+    recognition.onerror = (event) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+            console.warn('Speech recognition error:', event.error);
+        }
+        if (event.error === 'not-allowed') {
+            isListening = false;
+            updateMicUI(false);
+            alert('Microphone access denied. Please allow microphone access in your browser settings.');
+        }
+    };
+}
+
+function toggleMic() {
+    if (!recognition) {
+        alert('Voice input is not supported in this browser. Try Chrome or Edge.');
+        return;
+    }
+    if (isListening) {
+        stopListening();
+    } else {
+        startListening();
+    }
+}
+
+function startListening() {
+    isListening = true;
+    document.getElementById('userInput').placeholder = 'Listening...';
+    updateMicUI(true);
+    try { recognition.start(); } catch(e) {}
+}
+
+function stopListening() {
+    isListening = false;
+    document.getElementById('userInput').placeholder = 'Type your answer... (Shift+Enter for new line)';
+    updateMicUI(false);
+    try { recognition.stop(); } catch(e) {}
+}
+
+function updateMicUI(active) {
+    const btn = document.getElementById('micBtn');
+    const icon = document.getElementById('micIcon');
+    const pulse = document.getElementById('micPulse');
+    if (active) {
+        btn.classList.remove('bg-white', 'dark:bg-surface-800', 'text-surface-500', 'dark:text-surface-400');
+        btn.classList.add('bg-red-50', 'dark:bg-red-500/10', 'border-red-300', 'dark:border-red-500/30', 'text-red-600');
+        icon.classList.add('hidden');
+        pulse.classList.remove('hidden');
+    } else {
+        btn.classList.add('bg-white', 'dark:bg-surface-800', 'text-surface-500', 'dark:text-surface-400');
+        btn.classList.remove('bg-red-50', 'dark:bg-red-500/10', 'border-red-300', 'dark:border-red-500/30', 'text-red-600');
+        icon.classList.remove('hidden');
+        pulse.classList.add('hidden');
+    }
+}
+
+function toggleVoiceMode() {
+    voiceMode = !voiceMode;
+    const label = document.getElementById('voiceToggleLabel');
+    const btn = document.getElementById('voiceToggleBtn');
+    label.textContent = voiceMode ? '🔊' : '🔇';
+    if (voiceMode) {
+        btn.classList.add('bg-white/20');
+    } else {
+        btn.classList.remove('bg-white/20');
+        speechSynth.cancel(); // stop any current speech
+    }
+}
+
+function speakText(text) {
+    if (!voiceMode || !speechSynth) return;
+    speechSynth.cancel();
+    // Clean markdown and emojis for better speech
+    const clean = text
+        .replace(/#{1,6}\s/g, '')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`(.*?)`/g, '$1')
+        .replace(/[🎯📊⚠️✅❌💡🔥📝🏆⭐]/g, '')
+        .replace(/\n{2,}/g, '. ')
+        .trim();
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.rate = 1.05;
+    utterance.pitch = 1;
+    // Prefer a natural-sounding voice
+    const voices = speechSynth.getVoices();
+    const preferred = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) ||
+                      voices.find(v => v.lang.startsWith('en-') && !v.localService) ||
+                      voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utterance.voice = preferred;
+    speechSynth.speak(utterance);
+}
 
 // ===== DARK MODE =====
 function toggleDarkMode() {
@@ -618,6 +767,7 @@ async function callGemma4(userText, isSystem = false) {
 
         updateStats();
         addMessage('coach', textParts);
+        speakText(textParts);
     } catch (err) {
         removeThinking();
         addMessage('coach', `⚠️ Network error: ${err.message}`);
@@ -628,6 +778,8 @@ async function callGemma4(userText, isSystem = false) {
 }
 
 function sendMessage() {
+    if (isListening) stopListening(); // stop mic when sending
+    speechSynth.cancel(); // stop any ongoing speech
     const input = document.getElementById('userInput');
     const text = input.value.trim();
     if (!text && !pendingImage) return;
@@ -681,6 +833,8 @@ function updateStats() {
 
 // ===== SESSION END =====
 function endSession() {
+    if (isListening) stopListening();
+    speechSynth.cancel();
     if (!confirm('End this session? You\'ll get a final performance report.')) return;
 
     const endPrompt = `SESSION ENDING. The candidate has completed ${questionNum} questions.
