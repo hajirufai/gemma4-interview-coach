@@ -134,6 +134,20 @@
                                     <div class="text-xs text-surface-400 mt-0.5">Fallback — free tier</div>
                                 </div>
                             </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="provider" value="nvidia" class="hidden peer" onchange="updateProviderUI()">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-3 transition">
+                                    <div class="font-semibold text-sm text-surface-800 dark:text-surface-200">💚 NVIDIA NIM</div>
+                                    <div class="text-xs text-surface-400 mt-0.5">Fast inference — free tier</div>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="provider" value="huggingface" class="hidden peer" onchange="updateProviderUI()">
+                                <div class="peer-checked:border-brand-500 peer-checked:bg-brand-50 dark:peer-checked:bg-brand-500/10 border-2 border-surface-200 dark:border-surface-700 rounded-xl p-3 transition">
+                                    <div class="font-semibold text-sm text-surface-800 dark:text-surface-200">🤗 Hugging Face</div>
+                                    <div class="text-xs text-surface-400 mt-0.5">Open-source hub — free</div>
+                                </div>
+                            </label>
                         </div>
                     </div>
 
@@ -537,23 +551,46 @@ function toggleKeyVisibility() {
 }
 
 // ===== API PROVIDER =====
+const PROVIDERS = {
+    google: {
+        label: 'Google AI Studio API Key',
+        placeholder: 'AIzaSy...',
+        hint: 'Free at <a href="https://aistudio.google.com/apikey" target="_blank" class="text-brand-500 hover:underline">aistudio.google.com</a> — stays in your browser, never sent to any server.',
+        type: 'google' // native Google format
+    },
+    openrouter: {
+        label: 'OpenRouter API Key',
+        placeholder: 'sk-or-...',
+        hint: 'Free tier at <a href="https://openrouter.ai/keys" target="_blank" class="text-brand-500 hover:underline">openrouter.ai</a> — Gemma 4 on free tier.',
+        type: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+        models: { 'gemma-4-31b-it': 'google/gemma-4-31b-it:free', 'gemma-4-26b-a4b-it': 'google/gemma-4-26b-a4b-it:free' }
+    },
+    nvidia: {
+        label: 'NVIDIA NIM API Key',
+        placeholder: 'nvapi-...',
+        hint: 'Free at <a href="https://build.nvidia.com/explore/discover" target="_blank" class="text-brand-500 hover:underline">build.nvidia.com</a> — 1000 free credits on signup.',
+        type: 'openai',
+        baseUrl: 'https://integrate.api.nvidia.com/v1/chat/completions',
+        models: { 'gemma-4-31b-it': 'google/gemma-4-31b-it', 'gemma-4-26b-a4b-it': 'google/gemma-4-26b-a4b-it' }
+    },
+    huggingface: {
+        label: 'Hugging Face API Token',
+        placeholder: 'hf_...',
+        hint: 'Free at <a href="https://huggingface.co/settings/tokens" target="_blank" class="text-brand-500 hover:underline">huggingface.co</a> — Inference API free tier.',
+        type: 'openai',
+        baseUrl: 'https://router.huggingface.co/novita/v3/openai/chat/completions',
+        models: { 'gemma-4-31b-it': 'google/gemma-4-31b-it', 'gemma-4-26b-a4b-it': 'google/gemma-4-26b-a4b-it' }
+    }
+};
+
 function updateProviderUI() {
     apiProvider = document.querySelector('input[name="provider"]:checked').value;
-    const label = document.getElementById('apiKeyLabel');
-    const hint = document.getElementById('apiKeyHint');
-    const input = document.getElementById('apiKey');
-    const result = document.getElementById('keyTestResult');
-    result.classList.add('hidden');
-
-    if (apiProvider === 'google') {
-        label.textContent = 'Google AI Studio API Key';
-        input.placeholder = 'AIzaSy...';
-        hint.innerHTML = 'Free at <a href="https://aistudio.google.com/apikey" target="_blank" class="text-brand-500 hover:underline">aistudio.google.com</a> — stays in your browser, never sent to any server.';
-    } else {
-        label.textContent = 'OpenRouter API Key';
-        input.placeholder = 'sk-or-...';
-        hint.innerHTML = 'Free tier at <a href="https://openrouter.ai/keys" target="_blank" class="text-brand-500 hover:underline">openrouter.ai</a> — Gemma 4 available on free tier.';
-    }
+    const cfg = PROVIDERS[apiProvider];
+    document.getElementById('apiKeyLabel').textContent = cfg.label;
+    document.getElementById('apiKey').placeholder = cfg.placeholder;
+    document.getElementById('apiKeyHint').innerHTML = cfg.hint;
+    document.getElementById('keyTestResult').classList.add('hidden');
 }
 
 async function testApiKey() {
@@ -570,8 +607,9 @@ async function testApiKey() {
         let ok = false;
         let errMsg = '';
         const provider = document.querySelector('input[name="provider"]:checked').value;
+        const cfg = PROVIDERS[provider];
 
-        if (provider === 'google') {
+        if (cfg.type === 'google') {
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent?key=${key}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -581,10 +619,11 @@ async function testApiKey() {
             if (data.candidates) { ok = true; }
             else if (data.error) { errMsg = data.error.message || `Error ${data.error.code}`; }
         } else {
-            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            const testModel = cfg.models['gemma-4-31b-it'];
+            const res = await fetch(cfg.baseUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-                body: JSON.stringify({ model: 'google/gemma-4-31b-it:free', messages: [{ role: 'user', content: 'Say "ok" in one word.' }], max_tokens: 5 })
+                body: JSON.stringify({ model: testModel, messages: [{ role: 'user', content: 'Say "ok" in one word.' }], max_tokens: 5 })
             });
             const data = await res.json();
             if (data.choices) { ok = true; }
@@ -822,8 +861,9 @@ async function callGemma4(userText, isSystem = false) {
         let textParts = '';
         let usage = {};
 
-        if (apiProvider === 'openrouter') {
-            // === OpenRouter API (OpenAI-compatible) ===
+        const providerCfg = PROVIDERS[apiProvider];
+        if (providerCfg.type === 'openai') {
+            // === OpenAI-compatible API (OpenRouter, NVIDIA NIM, HuggingFace) ===
             const messages = [];
             for (const msg of conversationHistory) {
                 const role = msg.role === 'model' ? 'assistant' : 'user';
@@ -833,27 +873,27 @@ async function callGemma4(userText, isSystem = false) {
                 });
                 messages.push({ role, content });
             }
-            const orModel = model === 'gemma-4-26b-a4b-it' ? 'google/gemma-4-26b-a4b-it:free' : 'google/gemma-4-31b-it:free';
+            const oaiModel = providerCfg.models[model] || providerCfg.models['gemma-4-31b-it'];
             const maxRetries = 3;
-            let orData = null;
+            let oaiData = null;
             for (let attempt = 0; attempt < maxRetries; attempt++) {
-                const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                const res = await fetch(providerCfg.baseUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                    body: JSON.stringify({ model: orModel, messages, temperature: 0.75, max_tokens: 2048, top_p: 0.95 })
+                    body: JSON.stringify({ model: oaiModel, messages, temperature: 0.75, max_tokens: 2048, top_p: 0.95 })
                 });
-                orData = await res.json();
-                if (!orData.error || (orData.error.code !== 503 && orData.error.code !== 500) || attempt === maxRetries - 1) break;
+                oaiData = await res.json();
+                if (!oaiData.error || (oaiData.error.code !== 503 && oaiData.error.code !== 500) || attempt === maxRetries - 1) break;
                 await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
             }
             removeThinking();
-            if (orData.error) {
-                addMessage('coach', `⚠️ OpenRouter Error: ${orData.error.message || JSON.stringify(orData.error)}`);
+            if (oaiData.error) {
+                addMessage('coach', `⚠️ ${apiProvider.charAt(0).toUpperCase() + apiProvider.slice(1)} Error: ${oaiData.error.message || JSON.stringify(oaiData.error)}`);
                 sendBtn.disabled = false;
                 return;
             }
-            textParts = orData.choices?.[0]?.message?.content || '';
-            usage = { totalTokenCount: orData.usage?.total_tokens || 0 };
+            textParts = oaiData.choices?.[0]?.message?.content || '';
+            usage = { totalTokenCount: oaiData.usage?.total_tokens || 0 };
         } else {
             // === Google AI Studio API ===
             const maxRetries = 3;
