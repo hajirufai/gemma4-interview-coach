@@ -4,7 +4,7 @@ An AI-powered interview practice tool that conducts realistic mock interviews, e
 
 [![Built with Gemma 4](https://img.shields.io/badge/Built%20with-Gemma%204-blue?style=flat-square)](https://ai.google.dev/gemma)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-[![DEV.to Challenge](https://img.shields.io/badge/DEV.to-Gemma%204%20Challenge-purple?style=flat-square)](https://dev.to/challenges/gemma)
+[![DEV.to Challenge](https://img.shields.io/badge/DEV.to-Gemma%204%20Challenge-purple?style=flat-square)](https://dev.to/challenges/gemma4)
 
 **[🚀 Live Demo](https://hajirufai.github.io/gemma4-interview-coach)** · **[📝 Dev.to Post](https://dev.to)** · **[☕ Buy Me a Coffee](https://buymeacoffee.com/hajirufai)**
 
@@ -105,7 +105,7 @@ open index.html  # or just double-click the file
 
 Contributions welcome! Some ideas:
 
-- [ ] Voice input/output for realistic interview simulation
+- [x] Voice input/output for realistic interview simulation
 - [ ] Company-specific question banks (FAANG, startups, etc.)
 - [ ] Export session transcripts as PDF
 - [ ] Chrome extension for in-tab practice
@@ -128,4 +128,4 @@ Creator of [Interview Buddy](https://interview-buddy.com), an AI-powered intervi
 
 ---
 
-*Built for the [DEV.to Gemma 4 Challenge](https://dev.to/challenges/gemma) 🏆*
+*Built for the [DEV.to Gemma 4 Challenge](https://dev.to/challenges/gemma4) 🏆*
